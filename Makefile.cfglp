@@ -1,0 +1,310 @@
+
+#############################################################################################
+#
+#                                cfglp : A CFG Language Processor
+#                                --------------------------------
+#
+#           About:
+#
+#           Implemented   by  Tanu  Kanvar (tanu@cse.iitb.ac.in) and Uday
+#           Khedker    (http://www.cse.iitb.ac.in/~uday)  for the courses
+#           cs302+cs306: Language  Processors  (theory and  lab)  at  IIT
+#           Bombay.
+#
+#           Release  date  Jan  15, 2013.  Copyrights  reserved  by  Uday
+#           Khedker. This  implemenation  has been made  available purely
+#           for academic purposes without any warranty of any kind.
+#
+#           Documentation (functionality, manual, and design) and related
+#           tools are  available at http://www.cse.iitb.ac.in/~uday/cfglp
+#
+#
+###############################################################################################
+
+AST_OBJ = ast.o ast-eval.o ast-compile.o
+PROG_OBJ = program.o program-eval.o program-compile.o
+PROC_OBJ = procedure.o procedure-eval.o procedure-compile.o
+BB_OBJ = basic-block.o basic-block-eval.o basic-block-compile.o
+TAC_OBJ = atac-build.o tac-print.o
+OPT_OBJ = dfv_val.o flow_func.o  
+SYMTAB_OBJ = symbol-table.o symbol-table-compile.o
+OBJ_CORE = error-display.o main.o user-options.o local-environment.o icode.o reg-alloc.o 
+OBJ_GEN = scanner.o parser.o
+
+HEADERS_CORE = error-display.hh user-options.hh local-environment.hh ast.hh symbol-table.hh program.hh procedure.hh basic-block.hh icode.hh reg-alloc.hh common-classes.hh 
+HEADERS_GEN = parser.h parser.ih parserbase.h scanner.h scanner.ih scannerbase.h
+
+HEADERS = $(HEADERS_CORE) $(HEADERS_GEN)
+OBJ = $(OBJ_GEN) $(OBJ_CORE) $(AST_OBJ) $(PROC_OBJ) $(PROG_OBJ) $(BB_OBJ) $(SYMTAB_OBJ) $(TAC_OBJ) $(OPT_OBJ)
+
+CPP = g++
+BISONCPP = bisonc++
+FLEXCPP = flexc++
+TGT = cfglp
+
+
+CFLAGS = -g
+
+$(TGT): $(OBJ) 
+	$(CPP) --std=c++0x $(option) $(OBJ) -o $(TGT)
+
+%.o: %.cc $(HEADERS)
+	$(CPP) --std=c++0x $(option) $(CFLAGS) -c $<
+
+scanner.cc scannerbase.h: scanner.ll scanner.ih scanner.h
+	$(FLEXCPP) scanner.ll
+
+parser.cc parserbase.h: parser.yy parser.ih parser.h
+	$(BISONCPP) --verbose parser.yy
+
+LBITS=$(shell getconf LONG_BIT)
+level=-1
+
+build_repo:
+	touch .hidden
+	#@make --no-print-directory -f Makefile.cfglp clean
+	
+	cp ../SourceRepo/Interpreter/* .
+	cp ../SourceRepo/CommonCode/* .
+	cp ../SourceRepo/Compiler/* .
+	cp ../../Makefile.cfglp .
+	
+	@make --no-print-directory -f Makefile.cfglp cfglp
+
+store_repo:
+	cp *-eval.cc ../SourceRepo/Interpreter/
+	cp local-environment.* ../SourceRepo/Interpreter/
+	@#rm -f *-eval.cc ../SourceRepo/local-environment.*
+	
+	cp *-compile.cc ../SourceRepo/Compiler/
+	cp icode.* reg-alloc.* ../SourceRepo/Compiler/
+	@#rm -f *-compile.cc icode.* reg-alloc.*
+	
+	cp *.cc *.hh *.ih *.h ../SourceRepo/CommonCode/
+	@#rm -f *.cc *.hh *.ih *.h
+	
+	@#cp Interpreter/* .
+	@#cp Compiler/* .
+	@#cp CommonCode/* .
+
+make_cfg:
+	@touch .make_hidden
+	@if [ ! -f .hidden ]; then \
+		make -f Makefile.cfglp build_repo ; \
+	fi;
+	
+	@# Copy cfgpp with script file c2cfg
+	@if [ $(level) -eq -1 ]; then \
+		echo "Enter level"; \
+		exit 2; \
+	fi;
+	@if [ $(level) -eq 0 ]; then \
+		cp ../../../cfglp-exec/Level-0/level-$(LBITS)-bits/cfgpp ../../../cfglp-utility/; \
+	fi;
+	@if [ $(level) -eq 1 ]; then \
+		cp ../../../cfglp-exec/Level-1/level-$(LBITS)-bits/cfgpp ../../../cfglp-utility/; \
+	fi;
+	@if [ $(level) -eq 2 ]; then \
+		cp ../../../cfglp-exec/Level-2/level-$(LBITS)-bits/cfgpp ../../../cfglp-utility/; \
+	fi;
+	@#if [ $(level) -eq 3 ]; then \
+		#cp ../../../cfglp-exec/Level-3/level-$(LBITS)-bits/cfgpp ../../../cfglp-utility/; \
+	#fi;
+
+
+	
+	
+	@# Make test files folder
+	@mkdir -p test_files
+	@cp ../test_files/* test_files/
+	@#cp ../dummy_test_files/* test_files/
+	@cp ../../../cfglp-utility/try1.cs306.cfg test_files/
+	
+	@mkdir -p test_files_output
+	@cp ../test_files_output/* test_files_output/
+	
+	@# Make .cfg files	
+	@cp ../../../cfglp-utility/c2cfg.sh .
+	@./c2cfg.sh -d test_files
+	@rm -rf c2cfg.sh
+	@#rm ../../../cfglp-utility/cfgpp
+		
+
+
+
+
+
+check_compiler:
+	if [ ! -f .make_hidden ]; then \
+		make -f Makefile.cfglp make_cfg level=3 ; \
+	fi;
+
+	@# create .toks .ast .eval files	
+	@for file in `ls test_files/*.cs306.cfg`; do \
+		./cfglp $$file -tokens; \
+		mv $$file.toks $$file.toks.new; \
+		./cfglp $$file -ast; \
+		mv $$file.ast $$file.ast.new; \
+		./cfglp $$file -icode; \
+		mv $$file.ic $$file.ic.new; \
+		./cfglp $$file -symtab; \
+		mv $$file.sym $$file.sym.new; \
+		./cfglp $$file -lra -compile; \
+		mv $$file.spim $$file.lra.new; \
+		./cfglp $$file -compile; \
+		mv $$file.spim $$file.spim.new; \
+	done
+	
+	@# compare .toks .ast .eval files
+	@for cfglpfile in $(shell find -iname '*.cs306.cfg' | cut -f3 -d"/"); do \
+		diff -w -b -B test_files/$$cfglpfile.toks.new test_files_output/$$cfglpfile.toks.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - toks; \
+		fi; \
+		diff -w -b -B test_files/$$cfglpfile.ast.new test_files_output/$$cfglpfile.ast.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - ast; \
+		fi; \
+		diff -w -b -B test_files/$$cfglpfile.ic.new test_files_output/$$cfglpfile.ic.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - ic; \
+		fi; \
+		diff -w -b -B test_files/$$cfglpfile.sym.new test_files_output/$$cfglpfile.sym.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - sym; \
+		fi; \
+		diff -w -b -B test_files/$$cfglpfile.lra.new test_files_output/$$cfglpfile.lra.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - lra; \
+		fi; \
+		diff -w -b -B test_files/$$cfglpfile.spim.new test_files_output/$$cfglpfile.spim.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - spim; \
+		fi; \
+	done
+	
+	@# compare .toks .ast .eval files
+	
+	
+#	@rm -f test_files/*.toks test_files/*.toks.new
+#	@rm -f test_files/*.ast test_files/*.ast.new
+#	@rm -f test_files/*.ic test_files/*.ic.new
+#	@rm -f test_files/*.spim test_files/*.spim.new
+#	@rm -f test_files/*.lra test_files/*.lra.new
+#	@rm -f test_files/*.sym test_files/*.sym.new
+
+check_interpreter:
+
+	if [ ! -f .make_hidden ]; then \
+		make -f Makefile.cfglp make_cfg level=3 ; \
+	fi;
+
+	@# create .toks .ast .eval files	
+	@for file in `ls test_files/*.cs306.cfg`; do \
+		echo $(file); \
+		./cfglp $$file -tokens; \
+		mv $$file.toks $$file.toks.new; \
+		./cfglp $$file -ast; \
+		mv $$file.ast $$file.ast.new; \
+	done
+	
+	@# compare .toks .ast .eval files
+	@for cfglpfile in $(shell find -iname '*.cs306.cfg' | cut -f3 -d"/"); do \
+		diff -w -b -B test_files/$$cfglpfile.toks.new test_files_output/$$cfglpfile.toks.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - toks; \
+		fi; \
+		diff -w -b -B test_files/$$cfglpfile.ast.new test_files_output/$$cfglpfile.ast.old; \
+		RETVAL=$$?; \
+		if [ $$RETVAL -eq 0 ]; then \
+			echo -n; \
+		else \
+			echo failed $$cfglpfile - ast; \
+		fi; \
+	done
+	
+	@# compare .toks .ast .eval files
+	
+	@rm -f test_files/*.toks test_files/*.toks.new
+	@rm -f test_files/*.ast test_files/*.ast.new
+
+help:
+	@echo "Programmer's guide: Should be copied to SourceRepo directory of a level"
+	@echo "------------------"
+	@echo " "
+	@echo "		make -f Makefile.cfglp [options]"
+	@echo " "
+	@echo "  options:"
+	@echo "				Compiles the code using source files"
+	@echo "				from the present directory."
+	@echo "				Creates an executable cfglp."
+	@echo " "
+	@echo "	build_repo		Copies the contents of the Interpreter,"
+	@echo "				Compiler, and CommonCode directory to the"
+	@echo "				current location."
+	@echo "				Compiles the code."
+	@echo "				Creates an executable cfglp for interpretation."
+	@echo " "
+	@echo "	option=-DCOMPILE  	Compiles the code with macro COMPILE as"
+	@echo "				defined."
+	@echo "				Creates an executable cfglp for compilation."
+	@echo " "
+	@echo "	copy_files		Copies the source files from current"
+	@echo "				directory to their respective Interpreter,"
+	@echo "				CommonCode and Compiler directory."
+	@echo " "
+	@echo "	make_cfg level={NUM}	{NUM} is the level number whose test_files"
+	@echo "				.c files are to converted to .cfg files."
+	@echo "				Creates a local test_files and"
+	@echo "				test_files_output directory."
+	@echo "				Copies the .c files of test_files
+	@echo "				folder to the local
+	@echo "				test_files folder and test_files_output"
+	@echo "				contents to the local test_files_output"
+	@echo "				folder."
+	@echo "				Converts all the .c files of test_files"
+	@echo "				folder to .cfg."
+	@echo " "
+	@echo "	check_interpreter	Executes .cfg files using cfglp executable."
+	@echo "				Compares them with the corresponding files"
+	@echo "		 		in test_files_output files."
+	@echo " "
+	@echo "	check_compiler		Executes .cfg files using cfglp executable."
+	@echo "				Compares them with the corresponding files"
+	@echo "				in test_files_output files."
+	@echo " "
+	@echo "	clean			Cleans the current directory, restoring it"
+	@echo "				to its original form except keeping .cc"
+	@echo "				and .h files still in the current directory."
+
+clean :
+	@cp Makefile.cfglp ../../
+	#rm -f cfgpp plugin*.so
+	rm -rf test_files test_files_output
+	rm -f *.o scannerbase.h parserbase.h scanner.cc parser.cc parser.yy.output *.hh *.yy *.ih *.h *.cc *.ll
+	rm -f cfglp
+	rm -f cscope.out tags a.out
+	rm -f .hidden
+	rm -f .make_hidden
+	#rm -f Makefile.cfglp
